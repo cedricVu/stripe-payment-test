@@ -1,0 +1,352 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>SCA Client</title>
+    <script src="https://js.stripe.com/v3/" allow-scripts allow-popups allow-forms></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+</head>
+<body style="margin: 20px" onload="listSubscription()">
+    <div class="container">
+        <h1>Stripe payment demo</h1>
+        <div class="row">
+            <div class='col-sm-8'>
+                <div class="form-group">
+                    <label for="client-secret">Card holer name</label>
+                    <input class="form-control" id="card-holer-name" type="text">
+
+                    <div id="card-element" style="margin-top: 41px; margin-bottom: 43px"></div>
+                    
+                    <button class="btn btn-sm btn-primary" id="save-card-button">
+                        Save card
+                    </button>
+
+                    <button class="btn btn-sm btn-primary" id="recharge-button">
+                        Recharge money +10$
+                    </button>
+
+                    <button class="btn btn-sm btn-primary" id="register-subscription-button">
+                        Register subscription
+                    </button>
+
+                    <div id="card-element-errors" style="margin-top: 10px; color: red; font-weight: bold" role="alert"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class='row' style="margin-top: 20px">
+            <div class='col-sm-8'>
+                <hr />
+                <h2>List subscriptions</h2>
+                <ul class="list-group" id="list-subscription" style="margin-bottom: 20px">
+                </ul>
+                <button class="btn btn-sm btn-primary" id="cancel-subscription-button">
+                    Cancel subscription
+                </button>
+
+                <button class="btn btn-sm btn-primary" id="list-recharge-button">
+                    History recharge
+                </button>
+            </div>
+
+        </div>
+
+    </div>
+</body>
+<script>
+    let stripePublicKey = 'pk_test_yIXYB9JFB8DCuX0X1Jk0ebiH';
+    let defaultUserLoginToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdXRoIjoiUk9MRV9VU0VSIiwiZW1haWwiOiJuZ29jc29uLmJrZG5AZ21haWwuY29tIiwiX2lkIjoiNjBjMzM4MzY3MTgxMTg3NzY4MjI3Y2M5IiwiaWF0IjoxNjIzNjI4NjQyLCJleHAiOjE2MjM3MTUwNDJ9.BYe7dy1VIE_imQWVAb61zfS7LFdCtEBCIu91AJXLAPg';
+    let apiUrl = 'http://localhost:3004';
+
+    let stripe = Stripe(stripePublicKey);
+    let isValidCard = false;
+    let elements = stripe.elements();
+    let cardElement = elements.create('card', {
+      style: {
+        base: {
+          // iconColor: '#bbbb',
+          // color: '#fff',
+          fontWeight: '500',
+          fontFamily: 'Roboto, Open Sans, Segoe UI, sans-serif',
+          fontSize: '18px',
+          fontSmoothing: 'antialiased',
+          ':-webkit-autofill': {
+            color: '#fce883',
+          },
+          '::placeholder': {
+            color: '#87BBFD',
+          },
+        },
+
+        invalid: {
+          iconColor: '#FFC7EE',
+          color: '#FFC7EE',
+        },
+      },
+    });
+    cardElement.mount('#card-element');
+
+    cardElement.on('change', function(event) {
+        if (event.complete) {
+            isValidCard = true;
+        } else if (event.error) {
+            let displayError = document.getElementById('card-element-errors');
+            if (event.error) {
+                displayError.textContent = event.error.message;
+            } else {
+                displayError.textContent = '';
+            }
+            isValidCard = false;
+        }
+    });
+
+    let saveCardButton = document.getElementById('save-card-button');
+    let rechargeButton = document.getElementById('recharge-button');
+    let registerSubscriptionButton = document.getElementById('register-subscription-button');
+    let cancelSubscriptionButton = document.getElementById('cancel-subscription-button');
+    let confirmPaymentButton = document.getElementById('confirm-payment-button');
+    let listSubscriptionElement = document.getElementById('list-subscription');
+    let listRechargeButton = document.getElementById('list-recharge-button');
+
+    let defaultPaymentMethod;
+    let clientSecret;
+
+    saveCardButton.addEventListener('click', saveCard);
+
+    rechargeButton.addEventListener('click', recharge10);
+
+    registerSubscriptionButton.addEventListener('click', registerSubscription);
+
+    cancelSubscriptionButton.addEventListener('click', cancelSubscription);
+
+    listRechargeButton.addEventListener('click', listRecharge);
+
+    // confirmPaymentButton.addEventListener('click', confirmPayment);
+
+    function listSubscription() {
+        listSubscriptionElement.innerHTML = '';
+        fetch(`${apiUrl}/payments/subscriptions/list`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${defaultUserLoginToken}`,
+            },
+        })
+        .then(res => res.json())
+        .then(data => {
+            console.log('listSubscription', data);
+            for (const item of data) {
+                let li = document.createElement("li");
+                li.className = "list-group-item";
+                li.appendChild(document.createTextNode(item.id));
+                listSubscriptionElement.appendChild(li);
+            }
+
+        })
+    }
+
+    function listRecharge() {
+        listSubscriptionElement.innerHTML = '';
+        fetch(`${apiUrl}/payments/recharge/list`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${defaultUserLoginToken}`,
+            },
+        })
+        .then(res => res.json())
+        .then(data => {
+            console.log('listRecharge', data);
+            for (const item of data) {
+                let li = document.createElement("li");
+                li.className = "list-group-item";
+                li.appendChild(document.createTextNode(item.id));
+                listSubscriptionElement.appendChild(li);
+            }
+
+        })
+    }
+
+    function saveCard() {
+        if (!isValidCard) {
+            return alert('Please enter valid card!');
+        }
+
+        fetch(`${apiUrl}/payments/setup-intent`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${defaultUserLoginToken}`,
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            console.log('Setup intent: ', data);
+
+            let cardHolerName = document.getElementById('card-holer-name').value;
+
+            stripe.confirmCardSetup(data.clientSecret, {
+                payment_method: {
+                    card: cardElement,
+                    billing_details: {
+                      name: cardHolerName || 'Cedric',
+                    },
+                },
+            })
+            .then(function (result) {
+                if (result.error) {
+                    console.log('Save card error:', result.error);
+                    return alert('Save card error!');
+                }
+
+                fetch(`${apiUrl}/payments/payment-methods`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${defaultUserLoginToken}`,
+                  },
+                  body: JSON.stringify({
+                    paymentMethodId: result.setupIntent.payment_method,
+                    setupIntentClientSecret: data.clientSecret,
+                    default: true
+                  }),
+                })
+                .then(res => res.json())
+                .then(data => {
+                    console.log('Save card success!: ', data);
+                    alert('Save card success!');
+                })
+            });
+        })
+    }
+
+    function recharge10() {
+        fetch(`${apiUrl}/payments/recharge`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${defaultUserLoginToken}`,
+          },
+          body: JSON.stringify({
+            amount: 10,
+          }),
+        })
+        .then(res => res.json())
+        .then(data => {
+            console.log('recharge10: ', data);
+            const status = data.status;
+
+            if (status === 'succeeded') {
+                return alert('Payment success!');
+            }
+
+            clientSecret = data.clientSecret;
+
+            if (status === "requires_action") {
+                defaultPaymentMethod = data.paymentMethod;
+                confirmPayment();
+            }
+        })
+    }
+
+    function registerSubscription() {
+        fetch(`${apiUrl}/payments/subscriptions/register`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${defaultUserLoginToken}`,
+            },
+            body: JSON.stringify({
+                // productIds: []
+            }),
+        })
+        .then(res => res.json())
+        .then(data => {
+            console.log('registerSubscription: ', data);
+            const status = data.status;
+
+            if (status === 'active') {
+                return alert('Subscription success!');
+            }
+
+            if (status === 'incomplete') {
+                const paymentIntentStatus = data.latestInvoice.paymentIntent.status;
+
+                if (paymentIntentStatus === 'requires_confirmation' || paymentIntentStatus === 'requires_action') {
+                    clientSecret = data.latestInvoice.paymentIntent.clientSecret;
+                    defaultPaymentMethod = data.latestInvoice.paymentIntent.paymentMethod;
+
+                    confirmPayment().then(() => { listSubscription(); });
+
+                } else {
+                    alert('Not success, please check');
+                }
+            } else {
+                alert('Not success, please check');
+            }
+        });
+    }
+
+    function cancelSubscription() {
+        const subscriptionId = prompt('Subscriptions ID to cancel?');
+        if (!subscriptionId) {
+            return;
+        }
+
+        fetch(`${apiUrl}/payments/subscriptions/${subscriptionId}/cancel`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${defaultUserLoginToken}`,
+            },
+        })
+        .then(res => res.json())
+        .then(data => {
+            console.log('cancelSubscription', data);
+            alert('Success!');
+            listSubscription();
+        })
+    }
+
+
+    // Helper function
+
+    async function confirmPayment() {
+        const result = await stripe.confirmCardPayment(clientSecret, {
+            payment_method: defaultPaymentMethod,
+            // redirect_to_url: 'https://facebook.com',
+            // return_url: `${apiUrl}/payment-methods/payment/success`,
+            receipt_email: 'ngocson.bkdn@gmail.com',
+            // setup_future_usage: 'off_session'
+        });
+
+        console.log('confirmPayment', result);
+        if (result.error) {
+            return alert('Payment error!');
+        }
+
+        const status = result.paymentIntent.status;
+
+        if (status === 'succeeded') {
+            const paymentIntentId = result.paymentIntent.id;
+            // fulfulment
+            // fetch(`${apiUrl}/payment-methods/payment/success`, {
+            //   method: 'POST',
+            //   headers: {
+            //     'Content-Type': 'application/json',
+            //     'Authorization': `Bearer ${userLoginToken}`,
+            //   },
+            //   body: JSON.stringify({
+            //     paymentIntentId: paymentIntentId
+            //   }),
+            // });
+            alert('Payment success!');
+        }
+    }
+</script>
+</html>
+
+
+
